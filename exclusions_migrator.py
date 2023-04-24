@@ -1,6 +1,7 @@
 import requests
-from s1_api import get_sites, get_groups, get_exclusions
+from s1_api import S1Api
 convert_ids = lambda ids, map: [str(map[id]) for id in ids]
+
 
 
 def get_name_to_id_map(sites):
@@ -37,8 +38,7 @@ def parse_exclusion_data(exclusion_data):
 
 """Exclusion data must be in this form: 
 """
-def create_exclusion(base_url, auth_header, exclusion_data, account_id, site_map, group_map):
-    url = base_url + "exclusions"
+def create_exclusion(dest_API, exclusion_data, account_id, site_map, group_map):
     filter={}
     group_ids, site_ids, formatted_data = parse_exclusion_data(exclusion_data)
     
@@ -59,25 +59,21 @@ def create_exclusion(base_url, auth_header, exclusion_data, account_id, site_map
         }
 
     post_data = {"filter": filter, "data": formatted_data}
-    response = requests.post(url=url, json=post_data, headers=auth_header)
-    if response.status_code == 200:
-        print(f"exclusion successfully created")
-        return [response.json()["data"][i]["id"] for i in range(len(response.json()["data"]))] #Returns the list of exclusion ids created (should be only one)
-    else:
-        raise Exception(response.json(), post_data)
+    return dest_API.create_exclusion(post_data)
 
 """Returns two dictionnaries that maps group_ids and site_ids from origin to destination console.
 Both accounts must have the same sites and groups (same names)
 """ 
-def get_id_maps(origin_url, dest_url, origin_account_id, dest_account_id, origin_auth_header, dest_auth_header):
+def get_id_maps(origin_API, dest_API, origin_account_id, dest_account_id):
 
     group_id_map, site_id_map = dict(), dict()
+
     
 
-    origin_sites = get_sites(origin_url, origin_account_id, origin_auth_header)
+    origin_sites = origin_API.get_sites(origin_account_id)
     origin_site_names_to_id = get_name_to_id_map(origin_sites)
 
-    dest_sites = get_sites(dest_url, dest_account_id, dest_auth_header)
+    dest_sites = dest_API.get_sites(dest_account_id)
     dest_sites_name_to_id = get_name_to_id_map(dest_sites)
 
 
@@ -86,10 +82,10 @@ def get_id_maps(origin_url, dest_url, origin_account_id, dest_account_id, origin
             dest_site_id = dest_sites_name_to_id[origin_site_name]
             site_id_map[origin_site_id] = dest_site_id
 
-            origin_groups = get_groups(origin_url, origin_account_id, origin_site_id, origin_auth_header)
+            origin_groups = origin_API.get_groups(origin_account_id, origin_site_id)
             origin_groups_names_to_id = get_name_to_id_map(origin_groups)
 
-            dest_groups = get_groups(dest_url, dest_account_id, dest_site_id, dest_auth_header)
+            dest_groups = dest_API.get_groups(dest_account_id, dest_site_id)
             dest_groups_name_to_id = get_name_to_id_map(dest_groups)
 
             for (origin_group_name, origin_group_id) in origin_groups_names_to_id.items():
@@ -110,12 +106,12 @@ def get_id_maps(origin_url, dest_url, origin_account_id, dest_account_id, origin
         #if original_site.name
 
 """Migrates the exclusions from the origin account to the destination account"""
-def migrate_exclusions(origin_url, dest_url, origin_account_id, dest_account_id, origin_auth_header, dest_auth_header):
+def migrate_exclusions(origin_API, dest_API, origin_account_id, dest_account_id):
     #Get all exclusions
-    exclusions = get_exclusions(origin_url, origin_account_id, origin_auth_header)
+    exclusions = origin_API.get_exclusions(origin_account_id)
     count=len(exclusions)
     print(f"Retrieved {count} exclusions")
-    group_id_map, site_id_map = get_id_maps(origin_url, dest_url, origin_account_id, dest_account_id, origin_auth_header, dest_auth_header)
+    group_id_map, site_id_map = get_id_maps(origin_API, dest_API, origin_account_id, dest_account_id)
     print(f"Retrieved mapped Group and Site Ids")
     created_exclusions = []
     i=0
@@ -125,7 +121,7 @@ def migrate_exclusions(origin_url, dest_url, origin_account_id, dest_account_id,
         post_data={}
         try:
             ids = []
-            ids = create_exclusion(dest_url, dest_auth_header, exclusion, dest_account_id, site_id_map, group_id_map)
+            ids = create_exclusion(dest_API, exclusion, dest_account_id, site_id_map, group_id_map)
             created_exclusions.extend(ids)
             print(f"Id of created exclusion: {ids}")
             i+=1

@@ -1,4 +1,4 @@
-from s1_api import get_sites, get_groups, create_group, create_site, get_group_policy
+from s1_api import S1Api
 import copy
 
 """"Modifies the site to be compatible with the destination account and site creation."""
@@ -20,16 +20,16 @@ def adapt_group(group, dest_account_id, dest_site_id):
         del new_group[key]
     return {"data" : new_group}    
 
-def migrate_structure(origin_url, dest_url, origin_account_id, dest_account_id, origin_auth_header, dest_auth_header):
-    sites = get_sites(origin_url, origin_account_id, origin_auth_header)
+def migrate_structure(origin_API, dest_API, origin_account_id, dest_account_id):
+    sites = origin_API.get_sites(origin_account_id)
     for site in sites:
         dest_site = adapt_site(site, dest_account_id)
-        dest_site_id = create_site(dest_url, dest_auth_header, dest_site)
-        groups = get_groups(origin_url, origin_account_id, site.get("id"), origin_auth_header)
+        dest_site_id = dest_API.create_site(dest_site)
+        groups = origin_API.get_groups(origin_account_id, site.get("id"))
         for group in groups:
             if group.get("name") == "Default Group":
                 continue
             if group.get("inherits") == False:
-                group["policy"] = get_group_policy(origin_url, origin_auth_header, group.get("id"))
+                group["policy"] = origin_API.get_group_policy(group.get("id"))
             dest_group = adapt_group(group, dest_account_id, dest_site_id)
-            dest_group_id = create_group(dest_url, dest_auth_header, dest_group)
+            dest_group_id = dest_API.create_group(dest_group)
